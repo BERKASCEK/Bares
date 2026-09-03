@@ -33,3 +33,9 @@ Realtime, High, Above Normal, Normal, Below Normal, and Idle.
 - **Optimized CPU Consumption**: Event-driven design with minimal system overhead
 - **30-40% More Efficient**: Outperforms polling-based competitors in resource utilization
 - **Graceful Termination**: Zero memory leaks with professional WM_QUIT-based shutdown protocol
+
+## License
+
+Bares License  
+Copyright © 2026 BERKASCEK  
+Redistribution prohibited.
