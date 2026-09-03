@@ -3,7 +3,7 @@ A lightweight Windows taskbar utility built with Python and PyQt5. Includes quic
 
 Run it as Administrator. Supports Windows 10 and Windows 11.
 
-On the first launch, the program automatically installs the required pip libraries. This usually takes around 6–7 seconds depending on your internet speed.
+On the first launch, the program automatically installs the required Python packages. This usually takes about 1–2 minutes, depending on your internet speed.
 
 After that, every time you start the program, it checks the libraries and updates them if a new version is available. Normally this takes around 1–3 seconds, but startup can take longer if an update needs to be downloaded.
 
