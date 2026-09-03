@@ -27,8 +27,9 @@ Realtime, High, Above Normal, Normal, Below Normal, and Idle.
 
 ## 🚀 Rocket Mode Technical Advantages
 
-- **Event-Driven (WinEventHook)**: Instant window detection—no polling overhead
-- **Protected System Processes**: Explorer, DWM, and Settings remain stable
-- **6 Priority Levels**: Realtime to Idle with full granular control
-- **Ultra-Lightweight**: 30-40% lower CPU usage than polling competitors
-- **Professional Architecture**: Memory-safe shutdown with WM_QUIT protocol
+- **WinEventHook-Based Architecture**: Instant window change detection (eliminates polling overhead)
+- **Intelligent System Process Shielding**: Automatically protects critical processes (Explorer, DWM, System Settings)
+- **Six Priority Tiers**: Complete control spanning Realtime to Idle priority classes
+- **Optimized CPU Consumption**: Event-driven design with minimal system overhead
+- **30-40% More Efficient**: Outperforms polling-based competitors in resource utilization
+- **Graceful Termination**: Zero memory leaks with professional WM_QUIT-based shutdown protocol
