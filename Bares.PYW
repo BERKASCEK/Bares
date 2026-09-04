@@ -724,7 +724,10 @@ class RocketTaskbar(QWidget):
         self.animation.start()
 
     def closeEvent(self, event):
-        self.save_settings()
+        # NOT: Ayarlar burada TEKRAR kaydedilmiyor. animate_and_close() zaten
+        # kapanma animasyonu başlamadan ÖNCE, pencere tam boyutluyken kaydediyor.
+        # Burada tekrar kaydedersek, animasyonla küçülmüş (ör. 50px) geometri
+        # dosyaya yazılır ve bir sonraki açılışta pencere görünmez hale gelir.
         super().closeEvent(event)
 
     def hide_bar(self):
@@ -745,12 +748,15 @@ class RocketTaskbar(QWidget):
             self.move(self.x() + delta.x(), self.y() + delta.y())
             self.old_pos = event.globalPos()
 
+MIN_VALID_WIDTH = 400  # bu değerin altındaki kayıtlı genişlikler bozuk kabul edilir / anything below this is treated as a corrupt saved size
+
 if __name__ == "__main__":
     bar = RocketTaskbar()
     geo = getattr(bar, "_saved_geometry", None)
-    if geo:
+    if geo and geo.get("w", 0) >= MIN_VALID_WIDTH:
         bar.setGeometry(geo.get("x", 300), geo.get("y", 700), geo.get("w", 850), geo.get("h", 50))
     else:
+        # Kayıtlı boyut yok ya da bozuk (ör. kapanma animasyonundan kalma küçük boyut) -> varsayılana dön
         bar.setGeometry(300, 700, 850, 50)
     bar.show()
     sys.exit(app.exec_())
