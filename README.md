@@ -1,41 +1,54 @@
 # Bares
-A lightweight Windows taskbar utility built with Python and PyQt5. Includes quick web search via Google, Yandex, and DuckDuckGo, a customizable clock, hide/show controls, and Rocket Mode for dynamically adjusting the priority of the active application.
+
+A lightweight Windows taskbar utility built with Python and PyQt5. Includes quick web search via Google, Yandex, and DuckDuckGo, a customizable clock, hide/show controls, 5 fully customizable function buttons, and Rocket Mode for dynamically adjusting the priority of the active application.
 
 Run it as Administrator. Supports Windows 10 and Windows 11.
 
-On the first launch, the program automatically installs the required Python packages. This usually takes about 1–2 minutes, depending on your internet speed.
+On the first launch, the program automatically installs the required Python packages. This usually takes about 1–2 minutes, depending on your internet speed. After that, every time you start the program, it checks the libraries and updates them if a new version is available — normally 1–3 seconds, longer only if an update needs to be downloaded.
 
-After that, every time you start the program, it checks the libraries and updates them if a new version is available. Normally this takes around 1–3 seconds, but startup can take longer if an update needs to be downloaded.
+**Required pip packages:** PyQt5 · pywin32 · psutil
 
-Required pip packages:
-PyQt5
-pywin32
-psutil
+## Rocket Mode
 
-## What Should You Use It For?
+Useful if you frequently switch between applications, especially while gaming. It monitors the active window and gives its process a higher CPU priority, so Windows focuses more on whatever you're currently using — games, browsers, Discord, file managers, etc. This can help reduce sudden FPS drops caused by background apps eating CPU time.
 
-Rocket Mode is useful if you frequently switch between different applications, especially while gaming. It monitors the currently active window and gives its process a higher CPU priority, helping Windows focus more on the application you are currently using.
+When you switch windows, the previous process returns to Normal priority and the newly focused one gets the selected level. System/shell processes (Explorer, DWM, System Settings, etc.) are excluded automatically. Requires Administrator privileges since changing another process's priority needs elevation.
 
-This can be useful when switching between games, browsers, Discord, file managers, or other programs. In games, it may help reduce sudden FPS drops caused by background applications using CPU resources and can make FPS and frame times more stable.
+**Priority levels:** Realtime, High, Above Normal, Normal, Below Normal, Idle
 
-When you switch to another application, the previous process is returned to normal priority and the newly active application receives the selected priority level. Windows system and shell processes are excluded to avoid interfering with important system components.
+### 🚀 Technical Advantages
+- **WinEventHook-based** — instant window-change detection, no polling overhead
+- **System process shielding** — critical processes are auto-protected
+- **Six priority tiers** — full control from Realtime to Idle
+- **Event-driven, low CPU** — 30–40% more efficient than polling-based alternatives
+- **Clean shutdown** — WM_QUIT-based termination, zero memory leaks
 
-Rocket Mode requires Administrator privileges because changing the priority of other processes requires elevated permissions.
+## Custom Function Buttons
 
-Available priority levels:
-Realtime, High, Above Normal, Normal, Below Normal, and Idle.
+Five customizable slots sit to the right of the Rocket Mode button. Each starts empty, shown as **"+"**.
 
-## 🚀 Rocket Mode Technical Advantages
+**Assigning a slot** — right-click (or left-click) an empty slot to choose:
+| Option | What it does |
+|---|---|
+| **CMD** | Save a command; the dialog clearly states it will run **as Administrator**. Runs elevated (`runas`) in a persistent CMD window. |
+| **PowerShell** | Same as above, elevated PowerShell (`-NoExit`). |
+| **Select Installed Software** | Scans your Start Menu shortcuts with a searchable picker → pick one → **Add**. Includes an **Advanced: Browse Files...** button to pick *any* file/executable directly from disk. |
+| **Web Page** | Enter a URL; opens in your default browser. |
 
-- **WinEventHook-Based Architecture**: Instant window change detection (eliminates polling overhead)
-- **Intelligent System Process Shielding**: Automatically protects critical processes (Explorer, DWM, System Settings)
-- **Six Priority Tiers**: Complete control spanning Realtime to Idle priority classes
-- **Optimized CPU Consumption**: Event-driven design with minimal system overhead
-- **30-40% More Efficient**: Outperforms polling-based competitors in resource utilization
-- **Graceful Termination**: Zero memory leaks with professional WM_QUIT-based shutdown protocol
+An assigned slot can be **reassigned** or **removed** via right-click at any time. Left-clicking a filled slot runs its action immediately.
+
+## Settings
+
+Everything — search engine, Rocket Mode priority, window position, and all 5 function-button assignments — is saved automatically to:
+
+```
+%USERPROFILE%\Bares_ayarların.txt
+```
+
+(plain JSON). Loaded automatically on next launch — no setup needed.
 
 ## License
 
-Bares License  
-Copyright © 2026 BERKASCEK  
+Bares License
+Copyright © 2026 BERKASCEK
 Redistribution prohibited.
