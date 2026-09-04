@@ -1,4 +1,6 @@
 import sys
+import os
+import json
 import subprocess
 import importlib.util
 import ctypes
@@ -31,8 +33,8 @@ import win32con
 import psutil
 from ctypes import wintypes
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QHBoxLayout, QLineEdit, QPushButton,
-    QLabel, QMenu, QMessageBox
+    QApplication, QWidget, QHBoxLayout, QVBoxLayout, QLineEdit, QPushButton,
+    QLabel, QMenu, QMessageBox, QDialog, QListWidget, QFileDialog, QInputDialog
 )
 from PyQt5.QtCore import QTimer, QTime, Qt, QPropertyAnimation, QRect
 from PyQt5.QtGui import QFont
@@ -70,6 +72,48 @@ ctypes.windll.user32.UnhookWinEvent.restype = wintypes.BOOL
 ctypes.windll.user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
 
 # --------------------------
+# Özel işlev butonları (roket modunun sağındaki 5 buton) ayarları
+# --------------------------
+SLOT_COUNT = 5
+SETTINGS_FILENAME = "Bares_ayarların.txt"
+
+
+def get_settings_path():
+    return os.path.join(os.path.expanduser("~"), SETTINGS_FILENAME)
+
+
+def default_slot():
+    return {"type": None, "label": "+", "data": {}}
+
+
+def get_installed_apps():
+    """
+    Başlat Menüsü kısayollarını tarayarak bilgisayardaki uygulamaların bir
+    listesini çıkarır. / Scans the Start Menu shortcuts to build a list of
+    installed applications on the computer.
+    """
+    apps = {}
+    search_dirs = []
+    program_data = os.environ.get("ProgramData")
+    appdata = os.environ.get("APPDATA")
+    if program_data:
+        search_dirs.append(os.path.join(program_data, "Microsoft", "Windows", "Start Menu", "Programs"))
+    if appdata:
+        search_dirs.append(os.path.join(appdata, "Microsoft", "Windows", "Start Menu", "Programs"))
+
+    for base in search_dirs:
+        if not os.path.isdir(base):
+            continue
+        for root, _dirs, files in os.walk(base):
+            for f in files:
+                if f.lower().endswith((".lnk", ".exe")):
+                    name = os.path.splitext(f)[0]
+                    if name and name not in apps:
+                        apps[name] = os.path.join(root, f)
+    return apps
+
+
+# --------------------------
 # Admin kontrolü
 # --------------------------
 def is_admin():
@@ -91,6 +135,121 @@ try:
         ctypes.windll.user32.ShowWindow(whnd, 0)
 except Exception as e:
     print(f"Konsol gizleme hatası: {e}")
+
+# --------------------------
+# Komut yazma penceresi (CMD / PowerShell)
+# --------------------------
+class CommandDialog(QDialog):
+    def __init__(self, parent, shell_type, current_command=""):
+        super().__init__(parent)
+        title = "CMD Komutu" if shell_type == "cmd" else "PowerShell Komutu"
+        self.setWindowTitle(title)
+        self.setMinimumWidth(420)
+
+        layout = QVBoxLayout(self)
+
+        note = QLabel(
+            "⚠️ Bu komut Yönetici (Admin) olarak çalıştırılacaktır.\n"
+            "This command will be run as Administrator."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet("color: #b35900; font-weight: bold;")
+        layout.addWidget(note)
+
+        layout.addWidget(QLabel("Komut / Command:"))
+        self.command_edit = QLineEdit(current_command)
+        self.command_edit.setPlaceholderText("örn: ipconfig /all")
+        layout.addWidget(self.command_edit)
+
+        btn_row = QHBoxLayout()
+        save_btn = QPushButton("Kaydet / Save")
+        cancel_btn = QPushButton("İptal / Cancel")
+        save_btn.clicked.connect(self.accept)
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(save_btn)
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
+
+    def get_command(self):
+        return self.command_edit.text().strip()
+
+
+# --------------------------
+# Bilgisayardan yazılım seçme penceresi
+# --------------------------
+class AppSelectorDialog(QDialog):
+    def __init__(self, parent, apps):
+        super().__init__(parent)
+        self.setWindowTitle("Bilgisayardan Yazılım Seç / Select Installed Software")
+        self.setMinimumSize(420, 480)
+
+        self.apps = apps
+        self.selected_path = None
+        self.selected_name = None
+        self.selected_type = None
+
+        layout = QVBoxLayout(self)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Ara / Search...")
+        self.search_edit.textChanged.connect(self.filter_list)
+        layout.addWidget(self.search_edit)
+
+        self.list_widget = QListWidget()
+        self.list_widget.itemDoubleClicked.connect(lambda _item: self.accept_selection())
+        layout.addWidget(self.list_widget)
+        self.populate_list(apps)
+
+        btn_row = QHBoxLayout()
+        self.add_btn = QPushButton("➕ Ekle / Add")
+        self.add_btn.clicked.connect(self.accept_selection)
+        btn_row.addWidget(self.add_btn)
+
+        cancel_btn = QPushButton("İptal / Cancel")
+        cancel_btn.clicked.connect(self.reject)
+        btn_row.addWidget(cancel_btn)
+        layout.addLayout(btn_row)
+
+        self.advanced_btn = QPushButton("📁 Gelişmiş: Uygulama/Yazılım Seç (Dosyalardan...) / Advanced: Browse Files...")
+        self.advanced_btn.clicked.connect(self.browse_file)
+        layout.addWidget(self.advanced_btn)
+
+    def populate_list(self, apps):
+        self.list_widget.clear()
+        for name in sorted(apps.keys(), key=str.lower):
+            self.list_widget.addItem(name)
+
+    def filter_list(self, text):
+        text = text.lower().strip()
+        if not text:
+            self.populate_list(self.apps)
+            return
+        filtered = {n: p for n, p in self.apps.items() if text in n.lower()}
+        self.populate_list(filtered)
+
+    def accept_selection(self):
+        item = self.list_widget.currentItem()
+        if not item:
+            QMessageBox.information(self, "Bilgi / Info",
+                                     "Lütfen bir uygulama seçin. / Please select an application.")
+            return
+        name = item.text()
+        self.selected_name = name
+        self.selected_path = self.apps.get(name)
+        self.selected_type = "app"
+        self.accept()
+
+    def browse_file(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Dosyalardan Seç / Select From Files", "",
+            "Programlar / Programs (*.exe);;Tüm Dosyalar / All Files (*.*)"
+        )
+        if path:
+            self.selected_path = path
+            self.selected_name = os.path.splitext(os.path.basename(path))[0]
+            self.selected_type = "file"
+            self.accept()
+
 
 # --------------------------
 # Kenar butonu
@@ -132,6 +291,11 @@ class RocketTaskbar(QWidget):
         self.rocket_thread_ready = threading.Event()
         self.last_rocket_pid = None
         self.edge_button = None
+        self._saved_geometry = None
+
+        # Roket modunun sağındaki 5 özel işlev butonu / 5 custom function slots
+        self.function_slots = [default_slot() for _ in range(SLOT_COUNT)]
+        self.function_buttons = []
 
         # Roket modu için işlem öncelik seviyeleri / Process priority levels for rocket mode
         self.priority_levels = [
@@ -179,6 +343,17 @@ class RocketTaskbar(QWidget):
         self.rocket_btn.setToolTip(f"Roket Modu Önceliği / Priority: {self.selected_priority_name}")
         self.layout.addWidget(self.rocket_btn)
 
+        # --- Roket modu butonunun sağındaki 5 özel işlev butonu ---
+        for i in range(SLOT_COUNT):
+            btn = QPushButton("+")
+            btn.setFixedSize(30, 30)
+            btn.setContextMenuPolicy(Qt.CustomContextMenu)
+            btn.customContextMenuRequested.connect(lambda pos, idx=i: self.show_slot_menu(idx, pos))
+            btn.clicked.connect(lambda checked=False, idx=i: self.handle_slot_click(idx))
+            self.layout.addWidget(btn)
+            self.function_buttons.append(btn)
+            self.update_slot_button(i)
+
         self.clock_label = QLabel()
         self.clock_label.setFont(QFont("Arial", 11))
         self.layout.addStretch()
@@ -195,6 +370,9 @@ class RocketTaskbar(QWidget):
         self.timer.start(1000)
         self.update_time()
 
+        # Kayıtlı ayarları yükle (varsa) / Load saved settings (if any)
+        self.load_settings()
+
     def update_time(self):
         self.clock_label.setText(QTime.currentTime().toString("HH:mm"))
 
@@ -208,6 +386,7 @@ class RocketTaskbar(QWidget):
     def set_engine(self, engine, icon):
         self.selected_engine = engine
         self.engine_btn.setText(icon)
+        self.save_settings()
 
     def perform_search(self):
         query = self.search_box.text().strip()
@@ -239,6 +418,7 @@ class RocketTaskbar(QWidget):
         self.selected_priority = level
         self.selected_priority_name = name
         self.rocket_btn.setToolTip(f"Roket Modu Önceliği / Priority: {name}")
+        self.save_settings()
 
     def toggle_rocket_mode(self):
         if not self.rocket_mode_running:
@@ -349,11 +529,192 @@ class RocketTaskbar(QWidget):
             # Hata varsa konsola yazdırıyoruz
             print(f"Öncelik ayarlama hatası / Priority setting error (PID {pid}):\n{e}")
 
+    # --------------------------
+    # Özel işlev butonları (roket modunun sağındaki 5 buton)
+    # --------------------------
+    def show_slot_menu(self, idx, pos):
+        slot = self.function_slots[idx]
+        menu = QMenu()
+        if slot.get("type"):
+            reassign_menu = menu.addMenu("✏️ Yeniden Ata / Reassign")
+            self._add_assign_actions(reassign_menu, idx)
+            menu.addSeparator()
+            menu.addAction("🗑️ Kaldır / Remove", lambda: self.remove_slot(idx))
+        else:
+            self._add_assign_actions(menu, idx)
+        menu.exec_(self.function_buttons[idx].mapToGlobal(pos))
+
+    def _add_assign_actions(self, menu, idx):
+        menu.addAction("🖥️ CMD Komutu Ekle/Düzenle", lambda: self.assign_shell(idx, "cmd"))
+        menu.addAction("💻 PowerShell Komutu Ekle/Düzenle", lambda: self.assign_shell(idx, "powershell"))
+        menu.addAction("📦 Bilgisayardan Yazılım Seç", lambda: self.assign_app(idx))
+        menu.addAction("🌐 İnternet Sayfası Ekle/Düzenle", lambda: self.assign_url(idx))
+
+    def handle_slot_click(self, idx):
+        slot = self.function_slots[idx]
+        t = slot.get("type")
+        if t is None:
+            # Boş buton: kolaylık olsun diye sol tıkta da atama menüsünü göster
+            self.show_slot_menu(idx, self.function_buttons[idx].rect().bottomLeft())
+            return
+        try:
+            if t == "cmd":
+                self.run_elevated_shell("cmd", slot["data"].get("command", ""))
+            elif t == "powershell":
+                self.run_elevated_shell("powershell", slot["data"].get("command", ""))
+            elif t in ("app", "file"):
+                os.startfile(slot["data"].get("path", ""))
+            elif t == "url":
+                webbrowser.open(slot["data"].get("url", ""))
+        except Exception as e:
+            self.show_error(f"Çalıştırma hatası / Execution error:\n{e}")
+
+    def assign_shell(self, idx, shell_type):
+        slot = self.function_slots[idx]
+        current = slot["data"].get("command", "") if slot.get("type") == shell_type else ""
+        dlg = CommandDialog(self, shell_type, current)
+        if dlg.exec_() == QDialog.Accepted:
+            command = dlg.get_command()
+            if not command:
+                return
+            self.function_slots[idx] = {
+                "type": shell_type,
+                "label": "CMD" if shell_type == "cmd" else "PS",
+                "data": {"command": command},
+            }
+            self.update_slot_button(idx)
+            self.save_settings()
+
+    def assign_app(self, idx):
+        apps = get_installed_apps()
+        dlg = AppSelectorDialog(self, apps)
+        if dlg.exec_() == QDialog.Accepted and dlg.selected_path:
+            name = dlg.selected_name or "APP"
+            label = name[:4] if len(name) > 4 else name
+            self.function_slots[idx] = {
+                "type": dlg.selected_type,
+                "label": label,
+                "data": {"path": dlg.selected_path, "name": name},
+            }
+            self.update_slot_button(idx)
+            self.save_settings()
+
+    def assign_url(self, idx):
+        slot = self.function_slots[idx]
+        current = slot["data"].get("url", "") if slot.get("type") == "url" else ""
+        url, ok = QInputDialog.getText(
+            self, "İnternet Sayfası / Web Page", "URL girin / Enter URL:", QLineEdit.Normal, current
+        )
+        if ok and url.strip():
+            url = url.strip()
+            if not (url.startswith("http://") or url.startswith("https://")):
+                url = "https://" + url
+            try:
+                domain = url.split("//", 1)[1].split("/", 1)[0]
+            except Exception:
+                domain = url
+            label = domain.replace("www.", "")[:6] or "WEB"
+            self.function_slots[idx] = {
+                "type": "url",
+                "label": label,
+                "data": {"url": url},
+            }
+            self.update_slot_button(idx)
+            self.save_settings()
+
+    def remove_slot(self, idx):
+        self.function_slots[idx] = default_slot()
+        self.update_slot_button(idx)
+        self.save_settings()
+
+    def update_slot_button(self, idx):
+        slot = self.function_slots[idx]
+        btn = self.function_buttons[idx]
+        btn.setText(slot.get("label", "+"))
+        t = slot.get("type")
+        if t is None:
+            btn.setStyleSheet("background-color: #3e3e42; color: white; border: none; font-size: 16px;")
+            btn.setToolTip("Boş / Empty — Sağ tıklayarak işlev atayın / Right-click to assign a function")
+        else:
+            btn.setStyleSheet("background-color: #0078d7; color: white; border: none; font-size: 10px;")
+            data = slot.get("data", {})
+            if t == "cmd":
+                btn.setToolTip(f"CMD (Yönetici/Admin):\n{data.get('command', '')}")
+            elif t == "powershell":
+                btn.setToolTip(f"PowerShell (Yönetici/Admin):\n{data.get('command', '')}")
+            elif t in ("app", "file"):
+                btn.setToolTip(f"{data.get('name', '')}\n{data.get('path', '')}")
+            elif t == "url":
+                btn.setToolTip(data.get("url", ""))
+
+    def run_elevated_shell(self, shell_type, command):
+        if not command:
+            return
+        try:
+            if shell_type == "cmd":
+                exe = "cmd.exe"
+                params = f'/k "{command}"'
+            else:
+                exe = "powershell.exe"
+                escaped = command.replace('"', '\\"')
+                params = f'-NoExit -Command "{escaped}"'
+            ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, None, 1)
+        except Exception as e:
+            self.show_error(f"Komut çalıştırılamadı / Command execution failed:\n{e}")
+
+    # --------------------------
+    # Ayarları kaydetme / yükleme
+    # --------------------------
+    def save_settings(self):
+        try:
+            data = {
+                "selected_engine": self.selected_engine,
+                "selected_priority_name": self.selected_priority_name,
+                "geometry": {"x": self.x(), "y": self.y(), "w": self.width(), "h": self.height()},
+                "function_slots": self.function_slots,
+            }
+            with open(get_settings_path(), "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Ayarlar kaydedilemedi / Settings could not be saved:\n{e}")
+
+    def load_settings(self):
+        path = get_settings_path()
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.selected_engine = data.get("selected_engine", self.selected_engine)
+            engine_icons = {"Google": "🔍", "Yandex": "🟡", "DuckDuckGo": "🦆"}
+            self.engine_btn.setText(engine_icons.get(self.selected_engine, "🦆"))
+
+            priority_name = data.get("selected_priority_name")
+            if priority_name:
+                for name, level in self.priority_levels:
+                    if name == priority_name:
+                        self.selected_priority = level
+                        self.selected_priority_name = name
+                        self.rocket_btn.setToolTip(f"Roket Modu Önceliği / Priority: {name}")
+                        break
+
+            saved_slots = data.get("function_slots")
+            if isinstance(saved_slots, list) and len(saved_slots) == SLOT_COUNT:
+                self.function_slots = saved_slots
+                for i in range(SLOT_COUNT):
+                    self.update_slot_button(i)
+
+            self._saved_geometry = data.get("geometry")
+        except Exception as e:
+            print(f"Ayarlar yüklenemedi / Settings could not be loaded:\n{e}")
+
     def show_error(self, message):
         # Qt event sistemine uygun hata gösterme, güvenli thread kullanımı
         QTimer.singleShot(0, lambda: QMessageBox.warning(self, "Hata / Error", message))
 
     def animate_and_close(self):
+        self.save_settings()
         final_width = self.close_btn.width() + 20
         final_rect = QRect(self.x(), self.y(), final_width, self.height())
         self.animation = QPropertyAnimation(self, b"geometry")
@@ -361,6 +722,10 @@ class RocketTaskbar(QWidget):
         self.animation.setEndValue(final_rect)
         self.animation.finished.connect(self.close)
         self.animation.start()
+
+    def closeEvent(self, event):
+        self.save_settings()
+        super().closeEvent(event)
 
     def hide_bar(self):
         self.hide()
@@ -382,6 +747,10 @@ class RocketTaskbar(QWidget):
 
 if __name__ == "__main__":
     bar = RocketTaskbar()
-    bar.setGeometry(300, 700, 600, 50)
+    geo = getattr(bar, "_saved_geometry", None)
+    if geo:
+        bar.setGeometry(geo.get("x", 300), geo.get("y", 700), geo.get("w", 850), geo.get("h", 50))
+    else:
+        bar.setGeometry(300, 700, 850, 50)
     bar.show()
     sys.exit(app.exec_())
